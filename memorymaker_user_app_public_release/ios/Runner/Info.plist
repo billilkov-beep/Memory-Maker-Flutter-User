@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>MemoryMaker needs camera access so you can capture and upload event memories.</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>MemoryMaker needs photo library access so you can upload event photos and videos.</string>
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>MemoryMaker can save shared event memories to your library when you choose to save them.</string>
+</dict>
+</plist>
