@@ -108,16 +108,27 @@ class SupabaseRepository implements MemoryMakerRepository {
 
   @override
   Future<List<MmMedia>> loadMedia(String eventId) async {
-    final rows = await _client.from('media_uploads').select('id,event_id,original_filename,status,caption,created_at').eq('event_id', eventId).order('created_at', ascending: false);
-    return rows.map<MmMedia>((row) => MmMedia(
-          id: row['id'].toString(),
-          eventId: row['event_id'].toString(),
-          filename: (row['original_filename'] ?? 'memory.jpg').toString(),
-          status: (row['status'] ?? 'pending').toString(),
-          caption: row['caption']?.toString(),
-          url: '${AppConfig.appUrl}/api/media/${row['id']}/file',
-          createdAt: row['created_at'] == null ? null : DateTime.tryParse(row['created_at'].toString()),
-        )).toList();
+    final rows = await _client
+        .from('media_uploads')
+        .select('id,event_id,original_filename,status,caption,created_at,media_blobs(compressed_content_type,compressed_base64)')
+        .eq('event_id', eventId)
+        .order('created_at', ascending: false);
+    return rows.map<MmMedia>((row) {
+      String? directDataUrl;
+      final blob = row['media_blobs'];
+      if (blob is Map && blob['compressed_base64'] != null) {
+        directDataUrl = 'data:${blob['compressed_content_type'] ?? 'image/jpeg'};base64,${blob['compressed_base64']}';
+      }
+      return MmMedia(
+        id: row['id'].toString(),
+        eventId: row['event_id'].toString(),
+        filename: (row['original_filename'] ?? 'memory.jpg').toString(),
+        status: (row['status'] ?? 'pending').toString(),
+        caption: row['caption']?.toString(),
+        url: directDataUrl ?? '${AppConfig.appUrl}/api/media/${row['id']}/file',
+        createdAt: row['created_at'] == null ? null : DateTime.tryParse(row['created_at'].toString()),
+      );
+    }).toList();
   }
 
   @override

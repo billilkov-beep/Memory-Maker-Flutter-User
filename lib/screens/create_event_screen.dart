@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/repository_provider.dart';
 import '../theme.dart';
 import '../widgets/mm_widgets.dart';
+import '../utils_app.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key});
@@ -23,7 +24,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       showMmSnack(context, 'Gallery created. You can now upload photos and share QR code.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      showMmSnack(context, e.toString().replaceFirst('Exception: ', ''), error: true);
+      showMmSnack(context, friendlyError(e), error: true);
     } finally { if (mounted) setState(() => _loading = false); }
   }
 
@@ -32,13 +33,15 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     appBar: AppBar(title: const Text('Create Gallery', style: TextStyle(fontWeight: FontWeight.w900))),
     body: MmGradientBackground(child: ListView(padding: const EdgeInsets.all(18), children: [
       MmCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const SectionTitle('Free beta gallery', subtitle: 'Package buying is disabled for now. Create a gallery and start testing upload flow.'),
+        const SectionTitle('Create your private gallery', subtitle: 'Start a memory space, then invite guests with QR and upload from camera or gallery.'),
         const SizedBox(height: 18),
         TextField(controller: _title, decoration: const InputDecoration(labelText: 'Event title', prefixIcon: Icon(Icons.event_note_outlined))),
         const SizedBox(height: 14),
         DropdownButtonFormField<String>(value: _kind, decoration: const InputDecoration(labelText: 'Event type', prefixIcon: Icon(Icons.category_outlined)), items: _kinds.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(), onChanged: (v) => setState(() => _kind = v ?? _kind)),
         const SizedBox(height: 18),
         FilledButton.icon(onPressed: _loading ? null : _create, icon: const Icon(Icons.auto_awesome), label: Text(_loading ? 'Creating...' : 'Create Gallery')),
+        const SizedBox(height: 12),
+        const Text('Tip: after creating, you can add photos from your phone gallery or launch the Memory Maker camera.', textAlign: TextAlign.center, style: TextStyle(color: MmColors.muted, fontSize: 12)),
       ])),
     ])),
   );

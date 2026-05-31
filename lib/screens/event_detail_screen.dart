@@ -8,6 +8,7 @@ import '../services/image_service.dart';
 import '../services/repository_provider.dart';
 import '../theme.dart';
 import '../widgets/mm_widgets.dart';
+import '../utils_app.dart';
 import 'media_preview_screen.dart';
 
 class EventDetailScreen extends StatefulWidget {
@@ -39,12 +40,33 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       showMmSnack(context, 'Photo uploaded. It will appear after approval.');
       _refresh();
     } catch (e) {
-      showMmSnack(context, e.toString().replaceFirst('Exception: ', ''), error: true);
+      showMmSnack(context, friendlyError(e), error: true);
     }
   }
 
+  Future<void> _chooseUploadSource() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: MmColors.roseDark.withOpacity(.18), blurRadius: 30, offset: const Offset(0, 16))]),
+        child: SafeArea(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SectionTitle('Add a memory', subtitle: 'Choose from your gallery or open the Memory Maker camera.'),
+          const SizedBox(height: 16),
+          FilledButton.icon(onPressed: () { Navigator.pop(context); _upload(camera: false); }, icon: const Icon(Icons.photo_library_outlined), label: const Text('Choose from Gallery')),
+          const SizedBox(height: 10),
+          FilledButton.tonalIcon(onPressed: () { Navigator.pop(context); _upload(camera: true); }, icon: const Icon(Icons.camera_alt_outlined), label: const Text('Open Memory Maker Camera')),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), label: const Text('Cancel')),
+        ])),
+      ),
+    );
+  }
+
   Future<void> _shareQr() async {
-    await Share.share('Join my MemoryMaker gallery: $_shareUrl');
+    await Share.share('Join my Memory Maker gallery: $_shareUrl');
   }
 
   @override
@@ -72,17 +94,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ])),
       const SizedBox(height: 18),
       MmCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const SectionTitle('Upload memory', subtitle: 'Photos are compressed before upload to reduce storage.'),
+        const SectionTitle('Upload memory', subtitle: 'Use gallery or Memory Maker camera. Photos are compressed before upload to reduce storage.'),
         const SizedBox(height: 14),
         TextField(controller: _caption, decoration: const InputDecoration(labelText: 'Caption or memory note', prefixIcon: Icon(Icons.notes_outlined))),
         const SizedBox(height: 12),
         if (_lastPreview != null) ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.memory(_lastPreview!, height: 150, fit: BoxFit.cover)),
         if (_lastPreview != null) const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: FilledButton.icon(onPressed: () => _upload(camera: false), icon: const Icon(Icons.photo_library_outlined), label: const Text('Gallery'))),
-          const SizedBox(width: 10),
-          Expanded(child: FilledButton.tonalIcon(onPressed: () => _upload(camera: true), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera'))),
-        ]),
+        FilledButton.icon(onPressed: _chooseUploadSource, icon: const Icon(Icons.add_a_photo_outlined), label: const Text('Add Photo or Open Camera')),
       ])),
       const SizedBox(height: 18),
       const SectionTitle('Gallery', subtitle: 'Pending and approved memories from this event.'),
@@ -99,7 +117,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           itemBuilder: (_, i) => GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MediaPreviewScreen(media: media[i]))),
             child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), boxShadow: [BoxShadow(color: MmColors.roseDark.withOpacity(.08), blurRadius: 16, offset: const Offset(0, 8))]), child: ClipRRect(borderRadius: BorderRadius.circular(22), child: Stack(fit: StackFit.expand, children: [
-              if (media[i].url != null) Image.network(media[i].url!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 48, color: MmColors.roseDark)) else const Icon(Icons.image, size: 48, color: MmColors.roseDark),
+              if (imageProviderFromValue(media[i].url) != null) Image(image: imageProviderFromValue(media[i].url)!, fit: BoxFit.cover) else const Icon(Icons.image, size: 48, color: MmColors.roseDark),
               Positioned(left: 8, bottom: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(99)), child: Text(media[i].status, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)))),
             ]))),
           ),

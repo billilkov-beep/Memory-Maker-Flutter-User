@@ -4,6 +4,7 @@ import '../services/permissions_service.dart';
 import '../services/repository_provider.dart';
 import '../theme.dart';
 import '../widgets/mm_widgets.dart';
+import '../utils_app.dart';
 import 'create_event_screen.dart';
 import 'event_detail_screen.dart';
 
@@ -46,9 +47,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Hi, ${_user?.name.split(' ').first ?? 'there'}', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: MmColors.ink)),
-                  const Text('Your private memory hub is ready.', style: TextStyle(color: MmColors.muted)),
+                  const Text('Collect, approve, and share every event memory.', style: TextStyle(color: MmColors.muted)),
                 ])),
-                CircleAvatar(radius: 25, backgroundColor: MmColors.blush, backgroundImage: (_user?.avatarUrl != null && _user!.avatarUrl!.startsWith('http')) ? NetworkImage(_user!.avatarUrl!) : null, child: _user?.avatarUrl == null ? const Icon(Icons.person, color: MmColors.roseDark) : null),
+                CircleAvatar(radius: 25, backgroundColor: MmColors.blush, backgroundImage: imageProviderFromValue(_user?.avatarUrl), child: imageProviderFromValue(_user?.avatarUrl) == null ? const Icon(Icons.person, color: MmColors.roseDark) : null),
               ]),
               const SizedBox(height: 18),
               Container(
@@ -59,7 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 12),
                   const Text('Collect every memory from one private event gallery.', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),
-                  const Text('Create a beta gallery, share QR code, upload compressed photos, and manage approved memories.', style: TextStyle(color: Colors.white70)),
+                  const Text('Create private galleries, invite guests by QR, upload from camera/gallery, and keep memories organized in one beautiful space.', style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 18),
                   FilledButton.tonalIcon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateEventScreen())).then((_) => _load()), icon: const Icon(Icons.add), label: const Text('Create Gallery')),
                 ]),
@@ -69,6 +70,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(child: _MetricCard(label: 'Events', value: '${_events.length}', icon: Icons.event_available)),
                 const SizedBox(width: 12),
                 Expanded(child: _MetricCard(label: 'Uploads', value: '${_events.fold<int>(0, (v, e) => v + e.mediaCount)}', icon: Icons.photo_library_outlined)),
+              ]),
+              const SizedBox(height: 18),
+              Row(children: const [
+                Expanded(child: _FeatureMiniCard(icon: Icons.photo_camera_back_outlined, title: 'Smart Uploads', body: 'Compressed photos save storage.')),
+                SizedBox(width: 12),
+                Expanded(child: _FeatureMiniCard(icon: Icons.qr_code_2_rounded, title: 'QR Sharing', body: 'Invite guests with one tap.')),
               ]),
               const SizedBox(height: 22),
               SectionTitle('Recent galleries', subtitle: 'Tap an event to upload, share QR code, or view gallery.'),
@@ -99,4 +106,29 @@ class _MetricCard extends StatelessWidget {
   const _MetricCard({required this.label, required this.value, required this.icon});
   @override
   Widget build(BuildContext context) => MmCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: MmColors.roseDark), const SizedBox(height: 12), Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)), Text(label, style: const TextStyle(color: MmColors.muted))]));
+}
+
+
+class _FeatureMiniCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  const _FeatureMiniCard({required this.icon, required this.title, required this.body});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(.78),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: MmColors.blush),
+      boxShadow: [BoxShadow(color: MmColors.roseDark.withOpacity(.06), blurRadius: 18, offset: const Offset(0, 10))],
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, color: MmColors.roseDark),
+      const SizedBox(height: 10),
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      const SizedBox(height: 4),
+      Text(body, style: const TextStyle(fontSize: 12, color: MmColors.muted)),
+    ]),
+  );
 }
