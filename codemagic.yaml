@@ -2,10 +2,12 @@ workflows:
   android-apk:
     name: "MemoryMaker Android APK"
     max_build_duration: 60
-    instance_type: linux_x2
+    instance_type: linux
 
     environment:
       flutter: stable
+      groups:
+        - memorymaker_env
 
     scripts:
       - name: "Recreate Android project"
