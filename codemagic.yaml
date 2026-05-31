@@ -13,30 +13,64 @@ workflows:
         script: |
           rm -rf android
           flutter create . --platforms=android --org com.memorymaker --project-name memorymaker_user_app
-          sed -i 's/android:label="memorymaker_user_app"/android:label="Memory Maker"/g' android/app/src/main/AndroidManifest.xml
+
+      - name: "Patch Android permissions and app name"
+        script: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          permissions = [
+              '<uses-permission android:name="android.permission.INTERNET" />',
+              '<uses-permission android:name="android.permission.CAMERA" />',
+              '<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />',
+              '<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />',
+              '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+              '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          ]
+
+          for permission in reversed(permissions):
+              if permission not in text:
+                  text = text.replace(
+                      '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                      '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission
+                  )
+
+          text = text.replace('android:label="memorymaker_user_app"', 'android:label="Memory Maker"')
+          manifest.write_text(text)
+
+          strings = Path("android/app/src/main/res/values/strings.xml")
+          strings.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Memory Maker</string>
+          </resources>
+          """)
+          PY
 
       - name: "Create environment file"
         script: |
-          cat > .env <<EOF_ENV
+          cat > .env <<EOF
           SUPABASE_URL=${SUPABASE_URL}
           SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
           APP_URL=${APP_URL}
           DEMO_MODE=${DEMO_MODE}
-          EOF_ENV
+          EOF
+
+      - name: "Generate launcher icon"
+        script: |
+          flutter pub get
+          dart run flutter_launcher_icons || true
 
       - name: "Get Flutter packages"
         script: |
           flutter clean
           flutter pub get
-          dart run flutter_launcher_icons
 
       - name: "Build release APK"
         script: |
-          flutter build apk --release -t lib/main.dart \
-            --dart-define=SUPABASE_URL=${SUPABASE_URL} \
-            --dart-define=SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY} \
-            --dart-define=APP_URL=${APP_URL} \
-            --dart-define=DEMO_MODE=${DEMO_MODE}
+          flutter build apk --release -t lib/main.dart
 
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
