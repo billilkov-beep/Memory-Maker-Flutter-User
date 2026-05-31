@@ -1,6 +1,6 @@
 workflows:
   android-apk:
-    name: "MemoryMaker Android APK"
+    name: "Memory Maker Android APK"
     max_build_duration: 60
 
     environment:
@@ -13,24 +13,30 @@ workflows:
         script: |
           rm -rf android
           flutter create . --platforms=android --org com.memorymaker --project-name memorymaker_user_app
+          sed -i 's/android:label="memorymaker_user_app"/android:label="Memory Maker"/g' android/app/src/main/AndroidManifest.xml
 
       - name: "Create environment file"
         script: |
-          cat > .env <<EOF
+          cat > .env <<EOF_ENV
           SUPABASE_URL=${SUPABASE_URL}
           SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
           APP_URL=${APP_URL}
           DEMO_MODE=${DEMO_MODE}
-          EOF
+          EOF_ENV
 
       - name: "Get Flutter packages"
         script: |
           flutter clean
           flutter pub get
+          dart run flutter_launcher_icons
 
       - name: "Build release APK"
         script: |
-          flutter build apk --release -t lib/main.dart
+          flutter build apk --release -t lib/main.dart \
+            --dart-define=SUPABASE_URL=${SUPABASE_URL} \
+            --dart-define=SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY} \
+            --dart-define=APP_URL=${APP_URL} \
+            --dart-define=DEMO_MODE=${DEMO_MODE}
 
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
