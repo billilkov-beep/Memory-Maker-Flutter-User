@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_config.dart';
 import '../models/app_models.dart';
@@ -11,12 +10,40 @@ class SupabaseRepository implements MemoryMakerRepository {
   @override
   Future<bool> get isSignedIn async => _client.auth.currentUser != null;
 
+  Map<String, dynamic> _asMap(dynamic value) => value is Map<String, dynamic> ? value : Map<String, dynamic>.from(value as Map);
+
+  String? _readString(Map<String, dynamic>? row, List<String> keys) {
+    if (row == null) return null;
+    for (final key in keys) {
+      final v = row[key];
+      if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+    }
+    return null;
+  }
+
   @override
   Future<MmUser?> currentUser() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
-    final profile = await _client.from('profiles').select('full_name,phone,avatar_url').eq('id', user.id).maybeSingle();
-    return MmUser(id: user.id, email: user.email ?? '', name: (profile?['full_name'] ?? user.email?.split('@').first ?? 'MemoryMaker User').toString(), phone: profile?['phone']?.toString(), avatarUrl: profile?['avatar_url']?.toString());
+    Map<String, dynamic>? profile;
+    try {
+      final row = await _client.from('profiles').select('full_name,phone,avatar_url,avatar_base64,avatar_content_type').eq('id', user.id).maybeSingle();
+      profile = row == null ? null : _asMap(row);
+    } catch (_) {
+      profile = null;
+    }
+    final avatarBase64 = _readString(profile, ['avatar_base64']);
+    final avatarContentType = _readString(profile, ['avatar_content_type']) ?? 'image/jpeg';
+    final avatarUrl = avatarBase64 != null
+        ? 'data:$avatarContentType;base64,$avatarBase64'
+        : _readString(profile, ['avatar_url']);
+    return MmUser(
+      id: user.id,
+      email: user.email ?? '',
+      name: _readString(profile, ['full_name']) ?? user.userMetadata?['full_name']?.toString() ?? user.email?.split('@').first ?? 'Memory Maker User',
+      phone: _readString(profile, ['phone']),
+      avatarUrl: avatarUrl,
+    );
   }
 
   @override
@@ -50,17 +77,18 @@ class SupabaseRepository implements MemoryMakerRepository {
   Future<MmUser> updateProfile({required String name, String? phone, PickedCompressedImage? avatar}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
-    String? avatarUrl;
-    if (avatar != null) {
-      avatarUrl = 'data:${avatar.compressedContentType};base64,${avatar.compressedBase64}';
-    }
-    await _client.from('profiles').upsert({
+    final payload = <String, dynamic>{
       'id': user.id,
       'full_name': name,
       'phone': phone,
-      if (avatarUrl != null) 'avatar_url': avatarUrl,
       'updated_at': DateTime.now().toIso8601String(),
-    });
+    };
+    if (avatar != null) {
+      payload['avatar_base64'] = avatar.compressedBase64;
+      payload['avatar_content_type'] = avatar.compressedContentType;
+      payload['avatar_url'] = 'data:${avatar.compressedContentType};base64,${avatar.compressedBase64}';
+    }
+    await _client.from('profiles').upsert(payload);
     return (await currentUser())!;
   }
 
@@ -68,28 +96,44 @@ class SupabaseRepository implements MemoryMakerRepository {
   Future<List<MmEvent>> loadEvents() async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
-    final rows = await _client.from('events').select('id,title,slug,event_kind,status,gallery_cover_url,event_start_at,created_at').eq('owner_id', user.id).order('created_at', ascending: false);
-    return rows.map<MmEvent>((row) => MmEvent(
-          id: row['id'].toString(),
-          title: (row['title'] ?? 'Untitled event').toString(),
-          slug: (row['slug'] ?? row['id']).toString(),
-          kind: (row['event_kind'] ?? 'Event').toString(),
-          status: (row['status'] ?? 'active').toString(),
-          coverUrl: row['gallery_cover_url']?.toString(),
-          date: row['event_start_at'] == null ? null : DateTime.tryParse(row['event_start_at'].toString()),
-        )).toList();
+    final rows = await _client
+        .from('events')
+        .select('id,title,slug,event_kind,event_type,status,gallery_cover_url,event_start_at,created_at,media_uploads(count)')
+        .or('owner_id.eq.${user.id},user_id.eq.${user.id}')
+        .order('created_at', ascending: false);
+    return (rows as List).map<MmEvent>((raw) {
+      final row = _asMap(raw);
+      final mediaCountValue = row['media_uploads'];
+      int mediaCount = 0;
+      if (mediaCountValue is List && mediaCountValue.isNotEmpty && mediaCountValue.first is Map) {
+        mediaCount = int.tryParse('${mediaCountValue.first['count'] ?? 0}') ?? 0;
+      }
+      return MmEvent(
+        id: row['id'].toString(),
+        title: _readString(row, ['title', 'name']) ?? 'Untitled gallery',
+        slug: _readString(row, ['slug']) ?? row['id'].toString(),
+        kind: _readString(row, ['event_kind', 'event_type', 'kind']) ?? 'Event',
+        status: _readString(row, ['status']) ?? 'active',
+        coverUrl: _readString(row, ['gallery_cover_url', 'cover_url']),
+        date: row['event_start_at'] == null ? null : DateTime.tryParse(row['event_start_at'].toString()),
+        mediaCount: mediaCount,
+      );
+    }).toList();
   }
 
   @override
   Future<MmEvent> createEvent({required String title, required String kind, DateTime? date}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
-    final slug = '${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-    final row = await _client.from('events').insert({
+    final safeTitle = title.trim().isEmpty ? 'My Memory Gallery' : title.trim();
+    final slug = '${safeTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final payload = <String, dynamic>{
       'owner_id': user.id,
-      'title': title,
+      'user_id': user.id,
+      'title': safeTitle,
       'slug': slug,
       'event_kind': kind,
+      'event_type': kind,
       'status': 'active',
       'event_start_at': (date ?? DateTime.now()).toIso8601String(),
       'plan_code': 'beta',
@@ -102,18 +146,28 @@ class SupabaseRepository implements MemoryMakerRepository {
       'beta_free_access': true,
       'paid_at': DateTime.now().toIso8601String(),
       'stripe_payment_status': 'beta_free',
-    }).select().single();
-    return MmEvent(id: row['id'].toString(), title: row['title'].toString(), slug: row['slug'].toString(), kind: kind, status: row['status'].toString(), date: date);
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    try {
+      final row = await _client.from('events').insert(payload).select().single();
+      return MmEvent(id: row['id'].toString(), title: row['title'].toString(), slug: row['slug'].toString(), kind: kind, status: row['status'].toString(), date: date);
+    } catch (_) {
+      final row = await _client.rpc('app_create_event', params: {'p_title': safeTitle, 'p_kind': kind}).single();
+      return MmEvent(id: row['id'].toString(), title: row['title'].toString(), slug: row['slug'].toString(), kind: _readString(_asMap(row), ['event_kind', 'event_type']) ?? kind, status: _readString(_asMap(row), ['status']) ?? 'active', date: date);
+    }
   }
 
   @override
   Future<List<MmMedia>> loadMedia(String eventId) async {
     final rows = await _client
         .from('media_uploads')
-        .select('id,event_id,original_filename,status,caption,created_at,media_blobs(compressed_content_type,compressed_base64)')
+        .select('id,event_id,original_filename,file_url,thumbnail_url,object_key,storage_key,status,caption,uploaded_at,created_at,media_blobs(compressed_content_type,compressed_base64)')
         .eq('event_id', eventId)
+        .isFilter('deleted_at', null)
         .order('created_at', ascending: false);
-    return rows.map<MmMedia>((row) {
+    return (rows as List).map<MmMedia>((raw) {
+      final row = _asMap(raw);
       String? directDataUrl;
       final blob = row['media_blobs'];
       if (blob is Map && blob['compressed_base64'] != null) {
@@ -122,11 +176,11 @@ class SupabaseRepository implements MemoryMakerRepository {
       return MmMedia(
         id: row['id'].toString(),
         eventId: row['event_id'].toString(),
-        filename: (row['original_filename'] ?? 'memory.jpg').toString(),
-        status: (row['status'] ?? 'pending').toString(),
-        caption: row['caption']?.toString(),
-        url: directDataUrl ?? '${AppConfig.appUrl}/api/media/${row['id']}/file',
-        createdAt: row['created_at'] == null ? null : DateTime.tryParse(row['created_at'].toString()),
+        filename: _readString(row, ['original_filename', 'filename', 'object_key', 'storage_key']) ?? 'memory.jpg',
+        status: _readString(row, ['status']) ?? 'pending',
+        caption: _readString(row, ['caption']),
+        url: directDataUrl ?? _readString(row, ['file_url', 'thumbnail_url']) ?? '${AppConfig.appUrl}/api/media/${row['id']}/file',
+        createdAt: row['created_at'] == null ? (row['uploaded_at'] == null ? null : DateTime.tryParse(row['uploaded_at'].toString())) : DateTime.tryParse(row['created_at'].toString()),
       );
     }).toList();
   }
@@ -135,24 +189,30 @@ class SupabaseRepository implements MemoryMakerRepository {
   Future<MmMedia> uploadPhoto({required String eventId, required PickedCompressedImage image, String? caption}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
-    // Production-safe direct database upload. The web API remains available, but direct Supabase keeps the app independent of browser cookies.
     final guest = await _ensureUploader(eventId, user);
-    final upload = await _client.from('media_uploads').insert({
+    final uploadPayload = <String, dynamic>{
       'event_id': eventId,
       'guest_id': guest,
+      'uploader_id': user.id,
       'user_id': user.id,
+      'uploader_email': user.email,
       'kind': 'photo',
+      'media_type': 'photo',
       'object_key': 'db-mobile-pending',
+      'storage_key': 'db-mobile-pending',
       'original_filename': image.fileName,
       'content_type': image.compressedContentType,
       'byte_size': image.compressedBytes,
       'status': 'pending',
       'caption': caption,
       'uploaded_at': DateTime.now().toIso8601String(),
-    }).select().single();
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    final upload = await _client.from('media_uploads').insert(uploadPayload).select().single();
     final uploadId = upload['id'].toString();
-    await _client.from('media_uploads').update({'object_key': 'db-media/$uploadId'}).eq('id', uploadId);
-    await _client.from('media_blobs').insert({
+    await _client.from('media_uploads').update({'object_key': 'db-media/$uploadId', 'storage_key': 'db-media/$uploadId'}).eq('id', uploadId);
+    await _client.from('media_blobs').upsert({
       'upload_id': uploadId,
       'event_id': eventId,
       'owner_id': user.id,
@@ -165,7 +225,14 @@ class SupabaseRepository implements MemoryMakerRepository {
       'width': image.width,
       'height': image.height,
     });
-    return MmMedia(id: uploadId, eventId: eventId, filename: image.fileName, status: 'pending', caption: caption, url: '${AppConfig.appUrl}/api/media/$uploadId/file', createdAt: DateTime.now());
+    await _client.from('user_notifications').insert({
+      'user_id': user.id,
+      'event_id': eventId,
+      'title': 'Photo uploaded',
+      'body': 'Your memory was uploaded and is waiting for gallery approval.',
+      'status': 'unread',
+    });
+    return MmMedia(id: uploadId, eventId: eventId, filename: image.fileName, status: 'pending', caption: caption, url: 'data:${image.compressedContentType};base64,${image.compressedBase64}', createdAt: DateTime.now());
   }
 
   Future<String> _ensureUploader(String eventId, User user) async {
@@ -179,6 +246,8 @@ class SupabaseRepository implements MemoryMakerRepository {
       'status': 'accepted',
       'invited_at': DateTime.now().toIso8601String(),
       'accepted_at': DateTime.now().toIso8601String(),
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
     }).select('id').single();
     return inserted['id'].toString();
   }
@@ -188,15 +257,23 @@ class SupabaseRepository implements MemoryMakerRepository {
     final user = _client.auth.currentUser;
     if (user == null) return [];
     final rows = await _client.from('user_notifications').select('id,title,body,status,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
-    return rows.map<MmNotification>((row) => MmNotification(id: row['id'].toString(), title: row['title'].toString(), body: (row['body'] ?? '').toString(), read: row['status'] == 'read', createdAt: DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now())).toList();
+    return (rows as List).map<MmNotification>((raw) {
+      final row = _asMap(raw);
+      return MmNotification(id: row['id'].toString(), title: row['title'].toString(), body: (row['body'] ?? '').toString(), read: row['status'] == 'read', createdAt: DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now());
+    }).toList();
   }
 
   @override
   Future<List<SupportTicket>> loadTickets() async {
     final user = _client.auth.currentUser;
     if (user == null) return [];
-    final rows = await _client.from('support_tickets').select('id,subject,message,status,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
-    return rows.map<SupportTicket>((row) => SupportTicket(id: row['id'].toString(), subject: row['subject'].toString(), message: (row['message'] ?? '').toString(), status: (row['status'] ?? 'open').toString(), createdAt: DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now())).toList();
+    final rows = await _client.from('support_tickets').select('id,subject,message,status,admin_reply,created_at,updated_at').eq('user_id', user.id).order('updated_at', ascending: false).limit(50);
+    return (rows as List).map<SupportTicket>((raw) {
+      final row = _asMap(raw);
+      final reply = _readString(row, ['admin_reply']);
+      final message = reply == null ? (row['message'] ?? '').toString() : '${row['message'] ?? ''}\n\nAdmin reply: $reply';
+      return SupportTicket(id: row['id'].toString(), subject: row['subject'].toString(), message: message, status: (row['status'] ?? 'open').toString(), createdAt: DateTime.tryParse((row['updated_at'] ?? row['created_at']).toString()) ?? DateTime.now());
+    }).toList();
   }
 
   @override
@@ -204,6 +281,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
     final row = await _client.from('support_tickets').insert({'user_id': user.id, 'subject': subject, 'message': message, 'status': 'open'}).select().single();
+    await _client.from('user_notifications').insert({'user_id': user.id, 'title': 'Support request sent', 'body': 'We received your support request and will reply soon.', 'status': 'unread'});
     return SupportTicket(id: row['id'].toString(), subject: row['subject'].toString(), message: row['message'].toString(), status: row['status'].toString(), createdAt: DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now());
   }
 }

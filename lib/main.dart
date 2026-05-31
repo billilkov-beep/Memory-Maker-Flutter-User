@@ -3,6 +3,7 @@ import 'services/repository_provider.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
+import 'screens/lock_screen.dart';
 import 'widgets/mm_widgets.dart';
 
 Future<void> main() async {
@@ -51,7 +52,7 @@ class _SplashGateState extends State<SplashGate> with SingleTickerProviderStateM
       if (!mounted) return;
       Navigator.of(context).pushReplacement(PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 520),
-        pageBuilder: (_, animation, __) => widget.signedIn ? const MainShell() : const LoginScreen(),
+        pageBuilder: (_, animation, __) => widget.signedIn ? const LockScreen(child: MainShell()) : const LoginScreen(),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(
           opacity: animation,
           child: SlideTransition(

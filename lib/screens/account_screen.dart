@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/image_service.dart';
 import '../services/repository_provider.dart';
+import '../services/security_service.dart';
 import '../theme.dart';
 import '../widgets/mm_widgets.dart';
 import '../utils_app.dart';
@@ -20,13 +21,19 @@ class _AccountScreenState extends State<AccountScreen> {
   final _password = TextEditingController();
   bool _showPassword = false;
   bool _loading = true;
+  bool _pinEnabled = false;
+  bool _bioEnabled = false;
   final _imageService = ImageService();
+  final _security = SecurityService();
 
   @override
   void initState() { super.initState(); _load(); }
+
   Future<void> _load() async {
     final user = await RepositoryProvider.instance.currentUser();
-    if (mounted) setState(() { _user = user; _name.text = user?.name ?? ''; _phone.text = user?.phone ?? ''; _loading = false; });
+    final pin = await _security.pinEnabled;
+    final bio = await _security.biometricEnabled;
+    if (mounted) setState(() { _user = user; _name.text = user?.name ?? ''; _phone.text = user?.phone ?? ''; _pinEnabled = pin; _bioEnabled = bio; _loading = false; });
   }
 
   Future<void> _saveProfile({bool avatar = false}) async {
@@ -44,6 +51,52 @@ class _AccountScreenState extends State<AccountScreen> {
     catch (e) { showMmSnack(context, friendlyError(e), error: true); }
   }
 
+  Future<void> _togglePin(bool value) async {
+    if (!value) {
+      await _security.disablePin();
+      if (mounted) setState(() => _pinEnabled = false);
+      return showMmSnack(context, 'PIN lock disabled.');
+    }
+    final pin = await _showPinDialog();
+    if (pin == null) return;
+    await _security.setPin(pin);
+    if (mounted) setState(() => _pinEnabled = true);
+    showMmSnack(context, 'PIN lock enabled.');
+  }
+
+  Future<String?> _showPinDialog() async {
+    final c1 = TextEditingController();
+    final c2 = TextEditingController();
+    return showDialog<String>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Set app PIN'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: c1, keyboardType: TextInputType.number, obscureText: true, maxLength: 6, decoration: const InputDecoration(labelText: 'New PIN')),
+        const SizedBox(height: 8),
+        TextField(controller: c2, keyboardType: TextInputType.number, obscureText: true, maxLength: 6, decoration: const InputDecoration(labelText: 'Confirm PIN')),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: () {
+          final a = c1.text.trim();
+          final b = c2.text.trim();
+          if (a.length < 4 || a != b) return showMmSnack(context, 'PIN must match and be at least 4 digits.', error: true);
+          Navigator.pop(context, a);
+        }, child: const Text('Save PIN')),
+      ],
+    ));
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    if (!value) {
+      await _security.disableBiometric();
+      if (mounted) setState(() => _bioEnabled = false);
+      return showMmSnack(context, 'Biometric unlock disabled.');
+    }
+    final ok = await _security.enableBiometric();
+    if (mounted) setState(() => _bioEnabled = ok);
+    showMmSnack(context, ok ? 'Biometric unlock enabled.' : 'Biometric unlock is not available on this device.', error: !ok);
+  }
+
   Future<void> _logout() async {
     await RepositoryProvider.instance.signOut();
     if (!mounted) return;
@@ -53,19 +106,19 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('My Account', style: TextStyle(fontWeight: FontWeight.w900))),
-    body: MmGradientBackground(child: _loading ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(18), children: [
+    body: MmGradientBackground(child: _loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(onRefresh: _load, child: ListView(padding: const EdgeInsets.all(18), children: [
       MmCard(child: Column(children: [
         Stack(children: [
           CircleAvatar(radius: 44, backgroundColor: MmColors.blush, backgroundImage: imageProviderFromValue(_user?.avatarUrl), child: imageProviderFromValue(_user?.avatarUrl) == null ? const Icon(Icons.person, color: MmColors.roseDark, size: 42) : null),
           Positioned(right: 0, bottom: 0, child: InkWell(onTap: () => _saveProfile(avatar: true), child: const CircleAvatar(radius: 17, backgroundColor: MmColors.roseDark, child: Icon(Icons.camera_alt, size: 16, color: Colors.white))))
         ]),
         const SizedBox(height: 12),
-        Text(_user?.name ?? 'MemoryMaker User', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+        Text(_user?.name ?? 'Memory Maker User', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
         Text(_user?.email ?? '', style: const TextStyle(color: MmColors.muted)),
       ])),
       const SizedBox(height: 16),
       MmCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const SectionTitle('Profile settings', subtitle: 'Update your name, phone, and profile picture.'),
+        const SectionTitle('Profile settings', subtitle: 'Update your name, phone, and profile picture. Pull down to refresh after web changes.'),
         const SizedBox(height: 14),
         TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline))),
         const SizedBox(height: 12),
@@ -83,25 +136,27 @@ class _AccountScreenState extends State<AccountScreen> {
       ])),
       const SizedBox(height: 16),
       MmCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const SectionTitle('Account security', subtitle: 'Protect your app with a private PIN. Biometric unlock can be connected after store signing.'),
+        const SectionTitle('Account security', subtitle: 'Protect your private galleries with PIN or biometric unlock.'),
         const SizedBox(height: 12),
-        ListTile(
+        SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const CircleAvatar(backgroundColor: MmColors.blush, child: Icon(Icons.pin_outlined, color: MmColors.roseDark)),
+          secondary: const CircleAvatar(backgroundColor: MmColors.blush, child: Icon(Icons.pin_outlined, color: MmColors.roseDark)),
           title: const Text('App PIN lock', style: TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: const Text('Use your phone lock screen or set a private PIN for extra protection.'),
-          trailing: Switch(value: false, onChanged: (_) => showMmSnack(context, 'PIN lock will be enabled after security setup is finalized.')),
+          subtitle: const Text('Ask for a PIN when opening Memory Maker.'),
+          value: _pinEnabled,
+          onChanged: _togglePin,
         ),
-        ListTile(
+        SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const CircleAvatar(backgroundColor: MmColors.blush, child: Icon(Icons.fingerprint, color: MmColors.roseDark)),
+          secondary: const CircleAvatar(backgroundColor: MmColors.blush, child: Icon(Icons.fingerprint, color: MmColors.roseDark)),
           title: const Text('Biometric unlock', style: TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: const Text('Fingerprint or face unlock support for production store builds.'),
-          trailing: Switch(value: false, onChanged: (_) => showMmSnack(context, 'Biometric unlock requires store signing and device biometric setup.')),
+          subtitle: const Text('Use fingerprint or face unlock where available.'),
+          value: _bioEnabled,
+          onChanged: _toggleBiometric,
         ),
       ])),
       const SizedBox(height: 16),
       FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: const Color(0xFF9E2F3B)), onPressed: _logout, icon: const Icon(Icons.logout), label: const Text('Sign Out')),
-    ])),
+    ]))),
   );
 }
