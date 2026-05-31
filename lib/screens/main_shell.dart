@@ -8,6 +8,8 @@ import 'dashboard_screen.dart';
 import 'events_screen.dart';
 import 'notifications_screen.dart';
 import 'support_screen.dart';
+import 'lock_screen.dart';
+import '../services/security_service.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -15,14 +17,33 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
   MmUser? _user;
+  final _security = SecurityService();
+  bool _locking = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshUser();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed && !_locking) {
+      final needsLock = (await _security.pinEnabled) || (await _security.biometricEnabled);
+      if (!mounted || !needsLock) return;
+      _locking = true;
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LockScreen(child: MainShell())));
+    }
   }
 
   Future<void> _refreshUser() async {
@@ -30,7 +51,7 @@ class _MainShellState extends State<MainShell> {
     if (mounted) setState(() => _user = user);
   }
 
-  List<Widget> get _pages => const [DashboardScreen(), EventsScreen(), NotificationsScreen(), SupportScreen(), AccountScreen()];
+  List<Widget> get _pages => [const DashboardScreen(), const EventsScreen(), const NotificationsScreen(), const SupportScreen(), AccountScreen(onProfileChanged: _refreshUser)];
 
   @override
   Widget build(BuildContext context) {

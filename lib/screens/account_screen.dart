@@ -9,7 +9,8 @@ import '../utils_app.dart';
 import 'login_screen.dart';
 
 class AccountScreen extends StatefulWidget {
-  const AccountScreen({super.key});
+  final VoidCallback? onProfileChanged;
+  const AccountScreen({super.key, this.onProfileChanged});
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
@@ -41,6 +42,7 @@ class _AccountScreenState extends State<AccountScreen> {
       final picked = avatar ? await _imageService.pickAndCompress() : null;
       final user = await RepositoryProvider.instance.updateProfile(name: _name.text.trim(), phone: _phone.text.trim(), avatar: picked);
       if (mounted) setState(() => _user = user);
+      widget.onProfileChanged?.call();
       showMmSnack(context, 'Profile updated.');
     } catch (e) { showMmSnack(context, friendlyError(e), error: true); }
   }
