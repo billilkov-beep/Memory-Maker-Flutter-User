@@ -1,35 +1,35 @@
 workflows:
   android-apk:
-      name: MemoryMaker Android APK
-          max_build_duration: 60
-              instance_type: linux_x2
+    name: "MemoryMaker Android APK"
+    max_build_duration: 60
+    instance_type: linux_x2
 
-                  environment:
-                        flutter: stable
+    environment:
+      flutter: stable
 
-                            scripts:
-                                  - name: Create environment file
-                                          script: |
-                                                    cat > .env <<EOF
-                                                              SUPABASE_URL=https://ycnyhhcgvcgzwicnvoya.supabase.co
-                                                                        SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljbnloaGNndmNnendpY252b3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzU1NDQsImV4cCI6MjA5NDI1MTU0NH0.oFZF7ucHvhTe-pSS-iMXv72f3ZKfXlBglE6CE_fACQ0
-                                                                                  APP_URL=https://memorymaker.com
-                                                                                            DEMO_MODE=off
-                                                                                                      EOF
+    scripts:
+      - name: "Recreate Android project"
+        script: |
+          rm -rf android
+          flutter create . --platforms=android --org com.memorymaker --project-name memorymaker_user_app
 
-                                                                                                            - name: Recreate modern Android project
-                                                                                                                    script: |
-                                                                                                                              rm -rf android
-                                                                                                                                        flutter create . --platforms=android --org com.memorymaker --project-name memorymaker_user_app
+      - name: "Create environment file"
+        script: |
+          cat > .env <<EOF
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          APP_URL=${APP_URL}
+          DEMO_MODE=${DEMO_MODE}
+          EOF
 
-                                                                                                                                              - name: Get packages
-                                                                                                                                                      script: |
-                                                                                                                                                                flutter clean
-                                                                                                                                                                          flutter pub get
+      - name: "Get Flutter packages"
+        script: |
+          flutter clean
+          flutter pub get
 
-                                                                                                                                                                                - name: Build release APK
-                                                                                                                                                                                        script: |
-                                                                                                                                                                                                  flutter build apk --release -t lib/main.dart
+      - name: "Build release APK"
+        script: |
+          flutter build apk --release -t lib/main.dart
 
-                                                                                                                                                                                                      artifacts:
-                                                                                                                                                                                                            - build/app/outputs/flutter-apk/app-release.apk
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk
