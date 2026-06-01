@@ -10,7 +10,6 @@ abstract class MemoryMakerRepository {
   Future<void> updatePassword(String password);
   Future<void> signOut();
   Future<MmUser> updateProfile({required String name, String? phone, PickedCompressedImage? avatar});
-  Future<MmUser> removeProfileAvatar();
 
   Future<List<MmEvent>> loadEvents();
   Future<MmEvent> createEvent({required String title, required String kind, DateTime? date});

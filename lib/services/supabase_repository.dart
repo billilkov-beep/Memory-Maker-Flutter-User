@@ -27,7 +27,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     if (user == null) return null;
     Map<String, dynamic>? profile;
     try {
-      final row = await _client.from('profiles').select().eq('id', user.id).maybeSingle();
+      final row = await _client.from('profiles').select('full_name,phone,avatar_url,avatar_base64,avatar_content_type,profile_picture_url,profile_photo_url,image_url,photo_url').eq('id', user.id).maybeSingle();
       profile = row == null ? null : _asMap(row);
     } catch (_) {
       profile = null;
@@ -89,24 +89,6 @@ class SupabaseRepository implements MemoryMakerRepository {
       payload['avatar_url'] = 'data:${avatar.compressedContentType};base64,${avatar.compressedBase64}';
     }
     await _client.from('profiles').upsert(payload);
-    return (await currentUser())!;
-  }
-
-  @override
-  Future<MmUser> removeProfileAvatar() async {
-    final user = _client.auth.currentUser;
-    if (user == null) throw Exception('Please log in again.');
-    await _client.from('profiles').upsert({
-      'id': user.id,
-      'avatar_base64': null,
-      'avatar_content_type': null,
-      'avatar_url': null,
-      'profile_picture_url': null,
-      'profile_photo_url': null,
-      'image_url': null,
-      'photo_url': null,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
     return (await currentUser())!;
   }
 
@@ -218,49 +200,30 @@ class SupabaseRepository implements MemoryMakerRepository {
   Future<MmMedia> uploadPhoto({required String eventId, required PickedCompressedImage image, String? caption}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
-    final guest = await _ensureUploader(eventId, user);
-    final uploadPayload = <String, dynamic>{
-      'event_id': eventId,
-      'guest_id': guest,
-      'uploader_id': user.id,
-      'user_id': user.id,
-      'uploader_email': user.email,
-      'media_type': 'photo',
-      'object_key': 'db-mobile-pending',
-      'storage_key': 'db-mobile-pending',
-      'original_filename': image.fileName,
-      'content_type': image.compressedContentType,
-      'byte_size': image.compressedBytes,
-      'status': 'pending',
-      'caption': caption,
-      'uploaded_at': DateTime.now().toIso8601String(),
-      'created_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-    final upload = await _client.from('media_uploads').insert(uploadPayload).select().single();
-    final uploadId = upload['id'].toString();
-    await _client.from('media_uploads').update({'object_key': 'db-media/$uploadId', 'storage_key': 'db-media/$uploadId'}).eq('id', uploadId);
-    await _client.from('media_blobs').upsert({
-      'upload_id': uploadId,
-      'event_id': eventId,
-      'owner_id': user.id,
-      'original_filename': image.fileName,
-      'original_content_type': image.originalContentType,
-      'original_byte_size': image.originalBytes,
-      'compressed_content_type': image.compressedContentType,
-      'compressed_byte_size': image.compressedBytes,
-      'compressed_base64': image.compressedBase64,
-      'width': image.width,
-      'height': image.height,
-    });
-    await _client.from('user_notifications').insert({
-      'user_id': user.id,
-      'event_id': eventId,
-      'title': 'Photo uploaded',
-      'body': 'Your memory was uploaded and is waiting for gallery approval.',
-      'status': 'unread',
-    });
-    return MmMedia(id: uploadId, eventId: eventId, filename: image.fileName, status: 'pending', caption: caption, url: 'data:${image.compressedContentType};base64,${image.compressedBase64}', createdAt: DateTime.now());
+
+    final row = await _client.rpc('app_upload_photo_v2', params: {
+      'p_event_id': eventId,
+      'p_filename': image.fileName,
+      'p_content_type': image.compressedContentType,
+      'p_original_content_type': image.originalContentType,
+      'p_original_bytes': image.originalBytes,
+      'p_compressed_bytes': image.compressedBytes,
+      'p_compressed_base64': image.compressedBase64,
+      'p_width': image.width,
+      'p_height': image.height,
+      'p_caption': caption ?? '',
+    }).single();
+    final map = _asMap(row);
+    final uploadId = map['id'].toString();
+    return MmMedia(
+      id: uploadId,
+      eventId: eventId,
+      filename: _readString(map, ['original_filename', 'filename']) ?? image.fileName,
+      status: _readString(map, ['status']) ?? 'pending',
+      caption: caption,
+      url: 'data:${image.compressedContentType};base64,${image.compressedBase64}',
+      createdAt: DateTime.now(),
+    );
   }
 
   Future<String> _ensureUploader(String eventId, User user) async {

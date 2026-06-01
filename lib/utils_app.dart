@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 String friendlyError(Object error) {
   final raw = error.toString();
   final lower = raw.toLowerCase();
-  if (lower.contains('infinite recursion') || lower.contains('42p17') || lower.contains('row-level security') || lower.contains('policy') || lower.contains('permission denied')) {
-    return 'We could not save this yet. Please refresh and try again.';
+  if (lower.contains('infinite recursion') || lower.contains('42p17') || lower.contains('row-level security') || lower.contains('policy')) {
+    return 'We could not save this yet. Please run the latest Supabase migration and try again.';
   }
-  if (lower.contains('socket') || lower.contains('host lookup') || lower.contains('network') || lower.contains('clientexception') || lower.contains('failed host lookup')) {
+  if (lower.contains('socket') || lower.contains('host lookup') || lower.contains('network') || lower.contains('clientexception')) {
     return 'Connection issue. Please check your internet connection and try again.';
   }
   if (lower.contains('invalid login') || lower.contains('invalid credentials') || lower.contains('email not confirmed')) {
@@ -23,12 +23,6 @@ String friendlyError(Object error) {
   return 'Something went wrong. Please try again.';
 }
 
-bool _looksLikeBase64(String value) {
-  final v = value.trim();
-  if (v.length < 80 || v.startsWith('http') || v.contains('/') || v.contains(' ')) return false;
-  return RegExp(r'^[A-Za-z0-9+/=\r\n]+$').hasMatch(v);
-}
-
 ImageProvider? imageProviderFromValue(String? value) {
   if (value == null || value.trim().isEmpty) return null;
   final v = value.trim();
@@ -41,13 +35,6 @@ ImageProvider? imageProviderFromValue(String? value) {
       } catch (_) {
         return null;
       }
-    }
-  }
-  if (_looksLikeBase64(v)) {
-    try {
-      return MemoryImage(base64Decode(v));
-    } catch (_) {
-      return null;
     }
   }
   if (v.startsWith('http://') || v.startsWith('https://')) {
