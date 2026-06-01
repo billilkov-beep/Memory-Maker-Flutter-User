@@ -9,7 +9,9 @@ import 'create_event_screen.dart';
 import 'event_detail_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final MmUser? user;
+  final VoidCallback? onOpenAccount;
+  const DashboardScreen({super.key, this.user, this.onOpenAccount});
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -46,10 +48,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: ListView(padding: const EdgeInsets.all(18), children: [
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Hi, ${_user?.name.split(' ').first ?? 'there'}', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: MmColors.ink)),
+                  Text('Hi, ${(widget.user ?? _user)?.name.split(' ').first ?? 'there'}', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: MmColors.ink)),
                   const Text('Collect, approve, and share every event memory.', style: TextStyle(color: MmColors.muted)),
                 ])),
-                CircleAvatar(radius: 25, backgroundColor: MmColors.blush, backgroundImage: imageProviderFromValue(_user?.avatarUrl), child: imageProviderFromValue(_user?.avatarUrl) == null ? const Icon(Icons.person, color: MmColors.roseDark) : null),
+                InkWell(
+                  borderRadius: BorderRadius.circular(99),
+                  onTap: widget.onOpenAccount,
+                  child: CircleAvatar(
+                    radius: 25,
+                    backgroundColor: MmColors.blush,
+                    backgroundImage: imageProviderFromValue((widget.user ?? _user)?.avatarUrl),
+                    child: imageProviderFromValue((widget.user ?? _user)?.avatarUrl) == null ? const Icon(Icons.person, color: MmColors.roseDark) : null,
+                  ),
+                ),
               ]),
               const SizedBox(height: 18),
               Container(

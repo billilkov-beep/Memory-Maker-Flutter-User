@@ -22,6 +22,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   MmUser? _user;
   final _security = SecurityService();
   bool _locking = false;
+  bool _backgrounded = false;
 
   @override
   void initState() {
@@ -38,11 +39,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
-    if (state == AppLifecycleState.resumed && !_locking) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.detached) {
+      _backgrounded = true;
+      return;
+    }
+    if (state == AppLifecycleState.resumed && _backgrounded && !_locking) {
       final needsLock = (await _security.pinEnabled) || (await _security.biometricEnabled);
       if (!mounted || !needsLock) return;
       _locking = true;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LockScreen(child: MainShell())));
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => LockScreen(child: const SizedBox.shrink(), onUnlocked: () => Navigator.of(context).pop())));
+      _locking = false;
+      _backgrounded = false;
+      await _refreshUser();
     }
   }
 
@@ -51,7 +59,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (mounted) setState(() => _user = user);
   }
 
-  List<Widget> get _pages => [const DashboardScreen(), const EventsScreen(), const NotificationsScreen(), const SupportScreen(), AccountScreen(onProfileChanged: _refreshUser)];
+  List<Widget> get _pages => [
+    DashboardScreen(user: _user, onOpenAccount: () async { setState(() => _index = 4); await _refreshUser(); }),
+    const EventsScreen(),
+    const NotificationsScreen(),
+    const SupportScreen(),
+    AccountScreen(onProfileChanged: _refreshUser),
+  ];
 
   @override
   Widget build(BuildContext context) {

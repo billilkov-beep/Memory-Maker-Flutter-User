@@ -14,7 +14,7 @@ workflows:
           rm -rf android
           flutter create . --platforms=android --org com.memorymaker --project-name memorymaker_user_app
 
-      - name: "Patch Android permissions and app name"
+      - name: "Patch Android permissions, app name and biometric activity"
         script: |
           python3 - <<'PY'
           from pathlib import Path
@@ -26,7 +26,9 @@ workflows:
               '<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />',
               '<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />',
               '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
-              '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+              '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
+              '<uses-permission android:name="android.permission.USE_BIOMETRIC" />',
+              '<uses-permission android:name="android.permission.USE_FINGERPRINT" />'
           ]
           for permission in reversed(permissions):
               if permission not in text:
@@ -36,6 +38,9 @@ workflows:
                   )
           text = text.replace('android:label="memorymaker_user_app"', 'android:label="Memory Maker"')
           manifest.write_text(text)
+
+          activity = Path('android/app/src/main/kotlin/com/memorymaker/memorymaker_user_app/MainActivity.kt')
+          activity.write_text('''package com.memorymaker.memorymaker_user_app\n\nimport io.flutter.embedding.android.FlutterFragmentActivity\n\nclass MainActivity: FlutterFragmentActivity()\n''')
           PY
 
       - name: "Create environment file"

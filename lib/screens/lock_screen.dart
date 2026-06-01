@@ -6,7 +6,8 @@ import '../utils_app.dart';
 
 class LockScreen extends StatefulWidget {
   final Widget child;
-  const LockScreen({super.key, required this.child});
+  final VoidCallback? onUnlocked;
+  const LockScreen({super.key, required this.child, this.onUnlocked});
 
   @override
   State<LockScreen> createState() => _LockScreenState();
@@ -35,7 +36,11 @@ class _LockScreenState extends State<LockScreen> {
   }
 
   void _unlock() {
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => widget.child));
+    if (widget.onUnlocked != null) {
+      widget.onUnlocked!();
+    } else {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => widget.child));
+    }
   }
 
   Future<void> _useBiometric() async {
