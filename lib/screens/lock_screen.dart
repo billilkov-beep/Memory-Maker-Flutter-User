@@ -3,6 +3,7 @@ import '../services/security_service.dart';
 import '../theme.dart';
 import '../widgets/mm_widgets.dart';
 import '../utils_app.dart';
+import '../services/repository_provider.dart';
 
 class LockScreen extends StatefulWidget {
   final Widget child;
@@ -54,6 +55,17 @@ class _LockScreenState extends State<LockScreen> {
     if (mounted) showMmSnack(context, 'Incorrect PIN. Please try again.', error: true);
   }
 
+  Future<void> _sendResetEmail() async {
+    try {
+      final user = await RepositoryProvider.instance.currentUser();
+      if (user?.email == null || user!.email.isEmpty) throw Exception('No email');
+      await RepositoryProvider.instance.sendPasswordReset(user.email);
+      if (mounted) showMmSnack(context, 'Reset email sent. Check your inbox.');
+    } catch (_) {
+      if (mounted) showMmSnack(context, 'Could not send reset email right now.', error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_checking) {
@@ -78,6 +90,8 @@ class _LockScreenState extends State<LockScreen> {
                   if (_pinEnabled) FilledButton.icon(onPressed: _verifyPin, icon: const Icon(Icons.lock_open), label: const Text('Unlock')),
                   if (_bioEnabled) const SizedBox(height: 10),
                   if (_bioEnabled) OutlinedButton.icon(onPressed: _useBiometric, icon: const Icon(Icons.fingerprint), label: const Text('Use biometric unlock')),
+                  const SizedBox(height: 10),
+                  TextButton.icon(onPressed: _sendResetEmail, icon: const Icon(Icons.email_outlined), label: const Text('Send reset email')),
                 ]),
               ),
             ),

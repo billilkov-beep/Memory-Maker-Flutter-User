@@ -27,7 +27,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     if (user == null) return null;
     Map<String, dynamic>? profile;
     try {
-      final row = await _client.from('profiles').select('full_name,phone,avatar_url,avatar_base64,avatar_content_type,profile_picture_url,profile_photo_url,image_url').eq('id', user.id).maybeSingle();
+      final row = await _client.from('profiles').select().eq('id', user.id).maybeSingle();
       profile = row == null ? null : _asMap(row);
     } catch (_) {
       profile = null;
@@ -36,7 +36,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     final avatarContentType = _readString(profile, ['avatar_content_type']) ?? 'image/jpeg';
     final avatarUrl = avatarBase64 != null
         ? 'data:$avatarContentType;base64,$avatarBase64'
-        : _readString(profile, ['avatar_url', 'profile_picture_url', 'profile_photo_url', 'image_url']);
+        : _readString(profile, ['avatar_url', 'profile_picture_url', 'profile_photo_url', 'image_url', 'photo_url']);
     return MmUser(
       id: user.id,
       email: user.email ?? '',
@@ -93,13 +93,31 @@ class SupabaseRepository implements MemoryMakerRepository {
   }
 
   @override
+  Future<MmUser> removeProfileAvatar() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('Please log in again.');
+    await _client.from('profiles').upsert({
+      'id': user.id,
+      'avatar_base64': null,
+      'avatar_content_type': null,
+      'avatar_url': null,
+      'profile_picture_url': null,
+      'profile_photo_url': null,
+      'image_url': null,
+      'photo_url': null,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    return (await currentUser())!;
+  }
+
+  @override
   Future<List<MmEvent>> loadEvents() async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
 
     List rows;
     try {
-      rows = await _client.rpc('app_list_events') as List;
+      rows = await _client.rpc('app_list_events_v2') as List;
     } catch (_) {
       rows = await _client
           .from('events')
@@ -130,7 +148,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     final safeTitle = title.trim().isEmpty ? 'My Memory Gallery' : title.trim();
 
     try {
-      final row = await _client.rpc('app_create_event', params: {'p_title': safeTitle, 'p_kind': kind}).single();
+      final row = await _client.rpc('app_create_event_v2', params: {'p_title': safeTitle, 'p_kind': kind}).single();
       final map = _asMap(row);
       return MmEvent(
         id: map['id'].toString(),
@@ -164,7 +182,7 @@ class SupabaseRepository implements MemoryMakerRepository {
   Future<List<MmMedia>> loadMedia(String eventId) async {
     List rows;
     try {
-      rows = await _client.rpc('app_list_media', params: {'p_event_id': eventId}) as List;
+      rows = await _client.rpc('app_list_media_v2', params: {'p_event_id': eventId}) as List;
     } catch (_) {
       rows = await _client
           .from('media_uploads')
@@ -291,7 +309,7 @@ class SupabaseRepository implements MemoryMakerRepository {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Please log in again.');
     try {
-      final row = await _client.rpc('app_create_support_ticket', params: {'p_subject': subject, 'p_message': message}).single();
+      final row = await _client.rpc('app_create_support_ticket_v2', params: {'p_subject': subject, 'p_message': message}).single();
       final map = _asMap(row);
       return SupportTicket(id: map['id'].toString(), subject: map['subject'].toString(), message: map['message'].toString(), status: (map['status'] ?? 'open').toString(), createdAt: DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now());
     } catch (_) {

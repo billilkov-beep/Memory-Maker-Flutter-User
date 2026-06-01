@@ -43,7 +43,13 @@ class DemoRepository implements MemoryMakerRepository {
 
   @override
   Future<MmUser> updateProfile({required String name, String? phone, PickedCompressedImage? avatar}) async {
-    _user = (_user ?? const MmUser(id: 'demo-user', email: 'admin@memorymaker.com', name: 'Demo Host')).copyWith(name: name, phone: phone, avatarUrl: avatar == null ? null : 'memorymaker-local-avatar');
+    _user = (_user ?? const MmUser(id: 'demo-user', email: 'admin@memorymaker.com', name: 'Demo Host')).copyWith(name: name, phone: phone, avatarUrl: avatar == null ? _user?.avatarUrl : 'data:${avatar.compressedContentType};base64,${avatar.compressedBase64}');
+    return _user!;
+  }
+
+  @override
+  Future<MmUser> removeProfileAvatar() async {
+    _user = (_user ?? const MmUser(id: 'demo-user', email: 'admin@memorymaker.com', name: 'Demo Host')).copyWith(avatarUrl: '');
     return _user!;
   }
 

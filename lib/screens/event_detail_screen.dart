@@ -1,7 +1,9 @@
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import '../config/app_config.dart';
 import '../models/app_models.dart';
 import '../services/image_service.dart';
@@ -65,8 +67,38 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     );
   }
 
+  Future<File> _makeQrImageFile() async {
+    final painter = QrPainter(
+      data: _shareUrl,
+      version: QrVersions.auto,
+      gapless: true,
+      errorCorrectionLevel: QrErrorCorrectLevel.H,
+      color: const Color(0xFF4A1F28),
+      emptyColor: Colors.white,
+    );
+    final bytes = await painter.toImageData(920);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/memory-maker-${widget.event.slug}.png');
+    await file.writeAsBytes(bytes!.buffer.asUint8List(), flush: true);
+    return file;
+  }
+
   Future<void> _shareQr() async {
-    await Share.share('Join my Memory Maker gallery: $_shareUrl');
+    try {
+      final file = await _makeQrImageFile();
+      await Share.shareXFiles([XFile(file.path)], text: 'Join my Memory Maker gallery: $_shareUrl');
+    } catch (_) {
+      await Share.share('Join my Memory Maker gallery: $_shareUrl');
+    }
+  }
+
+  Future<void> _printQr() async {
+    try {
+      final file = await _makeQrImageFile();
+      await Share.shareXFiles([XFile(file.path)], text: 'Print or save this Memory Maker QR code: $_shareUrl');
+    } catch (_) {
+      showMmSnack(context, 'Use your phone share menu to print or save the QR code.', error: true);
+    }
   }
 
   @override
@@ -82,14 +114,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: MmColors.blush, borderRadius: BorderRadius.circular(99)), child: const Text('ACTIVE', style: TextStyle(fontWeight: FontWeight.w900, color: MmColors.roseDark))),
         ]),
         const SizedBox(height: 18),
-        Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: MmColors.ivory, borderRadius: BorderRadius.circular(24)), child: QrImageView(data: _shareUrl, size: 180, backgroundColor: Colors.white)),
+        Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: MmColors.ivory, borderRadius: BorderRadius.circular(24)), child: QrImageView(data: _shareUrl, size: 190, backgroundColor: Colors.white, embeddedImage: const AssetImage('assets/icons/app_icon.png'), embeddedImageStyle: const QrEmbeddedImageStyle(size: Size(42, 42)))),
         const SizedBox(height: 10),
         Text(_shareUrl, textAlign: TextAlign.center, style: const TextStyle(color: MmColors.muted, fontSize: 12)),
         const SizedBox(height: 14),
         Row(children: [
           Expanded(child: OutlinedButton.icon(onPressed: _shareQr, icon: const Icon(Icons.share), label: const Text('Share QR'))),
           const SizedBox(width: 10),
-          Expanded(child: OutlinedButton.icon(onPressed: () => showMmSnack(context, 'Print QR from your phone share/print menu.'), icon: const Icon(Icons.print), label: const Text('Print'))),
+          Expanded(child: OutlinedButton.icon(onPressed: _printQr, icon: const Icon(Icons.print), label: const Text('Print'))),
         ]),
       ])),
       const SizedBox(height: 18),

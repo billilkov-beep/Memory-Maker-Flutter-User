@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'permissions_service.dart';
+import 'security_service.dart';
 
 class PickedCompressedImage {
   final String fileName;
@@ -23,9 +24,11 @@ class ImageService {
   final ImagePicker _picker = ImagePicker();
 
   Future<PickedCompressedImage?> pickAndCompress({bool camera = false}) async {
+    SecurityService().suppressLockFor(const Duration(minutes: 3));
     final ok = camera ? await PermissionsService.requestCamera() : await PermissionsService.requestGallery();
     if (!ok) throw Exception(camera ? 'Camera permission is required.' : 'Gallery permission is required.');
     final file = await _picker.pickImage(source: camera ? ImageSource.camera : ImageSource.gallery, imageQuality: 95);
+    SecurityService().suppressLockFor(const Duration(seconds: 45));
     if (file == null) return null;
     final bytes = await File(file.path).readAsBytes();
     final decoded = img.decodeImage(bytes);
